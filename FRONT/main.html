@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>The Ultimate Film Finder</title>
+
+    <link rel="stylesheet" href="/front/main.css" />
+
+    <!-- ICONOS PRO -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+  </head>
+
+  <body>
+    <header class="cabecera">
+      <div class="logo-box">
+        <img src="/imagenes/LOGO1.png" />
+      </div>
+
+      <div class="buscador">
+        <input
+          type="text"
+          id="inputPelicula"
+          placeholder="Buscar película..."
+        />
+        <button onclick="buscarPeliculas()">Buscar</button>
+      </div>
+
+      <div class="acciones-header">
+        <span id="usuarioActivo" class="usuario-activo"></span>
+
+        <button class="btn-header" onclick="abrirModalLogin()">
+          <i class="fa-solid fa-user"></i>
+        </button>
+
+        <button
+          id="btnCarrito"
+          class="btn-header btn-carrito oculto"
+          onclick="abrirCarrito()"
+        >
+          <i class="fa-solid fa-cart-shopping"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="contenido">
+      <h2 class="titulo-seccion" id="tituloSeccion">Películas populares</h2>
+
+      <section id="contenedorPeliculas" class="contenedor-peliculas">
+        <p class="mensaje">Cargando películas...</p>
+      </section>
+    </main>
+
+    <script>
+      window.addEventListener("load", () => {
+        comprobarSesion();
+        cargarPopulares();
+      });
+
+      function comprobarSesion() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const btnCarrito = document.getElementById("btnCarrito");
+        const usuarioActivo = document.getElementById("usuarioActivo");
+
+        if (usuario) {
+          btnCarrito.classList.remove("oculto");
+          usuarioActivo.textContent = usuario.nombre;
+        } else {
+          btnCarrito.classList.add("oculto");
+          usuarioActivo.textContent = "";
+        }
+      }
+
+      function abrirModalLogin() {
+        alert("Aquí irá el login");
+      }
+
+      function abrirCarrito() {
+        const usuario = localStorage.getItem("usuario");
+
+        if (!usuario) {
+          abrirModalLogin();
+          return;
+        }
+
+        alert("Carrito (próximamente)");
+      }
+
+      async function cargarPopulares() {
+        const res = await fetch("/peliculas-populares");
+        const peliculas = await res.json();
+        pintarPeliculas(peliculas);
+      }
+
+      async function buscarPeliculas() {
+        const peli = document.getElementById("inputPelicula").value.trim();
+
+        if (peli === "") {
+          cargarPopulares();
+          return;
+        }
+
+        const res = await fetch(
+          `/buscar-basico?peli=${encodeURIComponent(peli)}`,
+        );
+        const peliculas = await res.json();
+        pintarPeliculas(peliculas);
+      }
+
+      function pintarPeliculas(peliculas) {
+        const contenedor = document.getElementById("contenedorPeliculas");
+        contenedor.innerHTML = "";
+
+        if (peliculas.length === 0) {
+          contenedor.innerHTML =
+            "<p class='mensaje'>No se encontraron películas.</p>";
+          return;
+        }
+
+        peliculas.forEach((p) => {
+          const card = document.createElement("article");
+          card.className = "card";
+
+          card.innerHTML = `
+            <img class="poster" src="${p.portada || "/imagenes/LOGO1.png"}">
+
+            <div class="card-info">
+                <h3>${p.titulo}</h3>
+                <p class="categoria">${p.generos.join(" • ")}</p>
+                <p class="descripcion">${p.descripcion}</p>
+
+                <div class="botones-card">
+                    <button class="btn-primary">Ver más</button>
+                    <button class="btn-secondary">Guardar</button>
+                </div>
+            </div>
+        `;
+
+          contenedor.appendChild(card);
+        });
+      }
+    </script>
+  </body>
+</html>
