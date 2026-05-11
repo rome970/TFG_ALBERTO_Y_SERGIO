@@ -3,10 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>The Ultimate Film Finder</title>
-
     <link rel="stylesheet" href="/front/main.css" />
-
-    <!-- ICONOS PRO -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
@@ -16,7 +13,7 @@
   <body>
     <header class="cabecera">
       <div class="logo-box">
-        <img src="/imagenes/LOGO1.png" />
+        <img src="/imagenes/LOGO1.png" alt="Logo TUFF" />
       </div>
 
       <div class="buscador">
@@ -31,7 +28,7 @@
       <div class="acciones-header">
         <span id="usuarioActivo" class="usuario-activo"></span>
 
-        <button class="btn-header" onclick="abrirModalLogin()">
+        <button class="btn-header" onclick="abrirModalLogin()" title="Login">
           <i class="fa-solid fa-user"></i>
         </button>
 
@@ -39,8 +36,18 @@
           id="btnCarrito"
           class="btn-header btn-carrito oculto"
           onclick="abrirCarrito()"
+          title="Carrito"
         >
           <i class="fa-solid fa-cart-shopping"></i>
+        </button>
+
+        <button
+          id="btnLogout"
+          class="btn-header btn-logout oculto"
+          onclick="cerrarSesion()"
+          title="Cerrar sesión"
+        >
+          <i class="fa-solid fa-right-from-bracket"></i>
         </button>
       </div>
     </header>
@@ -53,44 +60,278 @@
       </section>
     </main>
 
+    <div id="modalLogin" class="modal oculto">
+      <div class="modal-contenido">
+        <h2 id="tituloModal">Iniciar sesión</h2>
+
+        <input
+          type="text"
+          id="nombreUsuario"
+          placeholder="Nombre"
+          class="oculto"
+        />
+        <input type="email" id="emailUsuario" placeholder="Email" />
+        <input type="password" id="passwordUsuario" placeholder="Contraseña" />
+
+        <button id="btnAccionUsuario" onclick="loginUsuario()">
+          Iniciar sesión
+        </button>
+        <button class="cerrar" onclick="cerrarModalLogin()">Cerrar</button>
+
+        <p class="texto-modal" id="cambiarModo" onclick="cambiarModoRegistro()">
+          ¿No tienes cuenta? Regístrate
+        </p>
+      </div>
+    </div>
+
+    <div id="modalCarrito" class="modal oculto">
+      <div class="modal-contenido modal-carrito">
+        <h2>Mi carrito</h2>
+
+        <div id="contenidoCarrito" class="contenido-carrito"></div>
+
+        <button class="cerrar" onclick="cerrarCarrito()">Cerrar</button>
+      </div>
+    </div>
+
     <script>
+      let modoRegistro = false;
+
       window.addEventListener("load", () => {
         comprobarSesion();
         cargarPopulares();
       });
 
-      function comprobarSesion() {
+      function mensajeRespuesta(data) {
+        if (data.mensaje) {
+          return data.mensaje + (data.error ? "\n\n" + data.error : "");
+        }
+
+        if (data.detail) {
+          return (
+            "Error de validación:\n\n" + JSON.stringify(data.detail, null, 2)
+          );
+        }
+
+        if (data.error) {
+          return "Error:\n\n" + data.error;
+        }
+
+        return "Error desconocido. Revisa la consola o Supabase.";
+      }
+
+      function obtenerUsuarioActual() {
         const usuario = JSON.parse(localStorage.getItem("usuario"));
+
+        if (!usuario || !usuario.id || !usuario.nombre || !usuario.email) {
+          localStorage.removeItem("usuario");
+          return null;
+        }
+
+        return usuario;
+      }
+
+      function comprobarSesion() {
+        const usuario = obtenerUsuarioActual();
+
         const btnCarrito = document.getElementById("btnCarrito");
+        const btnLogout = document.getElementById("btnLogout");
         const usuarioActivo = document.getElementById("usuarioActivo");
 
         if (usuario) {
           btnCarrito.classList.remove("oculto");
+          btnLogout.classList.remove("oculto");
           usuarioActivo.textContent = usuario.nombre;
         } else {
           btnCarrito.classList.add("oculto");
+          btnLogout.classList.add("oculto");
           usuarioActivo.textContent = "";
         }
       }
 
-      function abrirModalLogin() {
-        alert("Aquí irá el login");
+      function cerrarSesion() {
+        localStorage.removeItem("usuario");
+        comprobarSesion();
+        alert("Sesión cerrada");
       }
 
-      function abrirCarrito() {
-        const usuario = localStorage.getItem("usuario");
+      function abrirModalLogin() {
+        document.getElementById("modalLogin").classList.remove("oculto");
+      }
+
+      function cerrarModalLogin() {
+        document.getElementById("modalLogin").classList.add("oculto");
+      }
+
+      function cambiarModoRegistro() {
+        modoRegistro = !modoRegistro;
+
+        const nombre = document.getElementById("nombreUsuario");
+        const titulo = document.getElementById("tituloModal");
+        const boton = document.getElementById("btnAccionUsuario");
+        const texto = document.getElementById("cambiarModo");
+
+        if (modoRegistro) {
+          nombre.classList.remove("oculto");
+          titulo.textContent = "Registrarse";
+          boton.textContent = "Crear cuenta";
+          boton.setAttribute("onclick", "registrarUsuario()");
+          texto.textContent = "¿Ya tienes cuenta? Inicia sesión";
+        } else {
+          nombre.classList.add("oculto");
+          titulo.textContent = "Iniciar sesión";
+          boton.textContent = "Iniciar sesión";
+          boton.setAttribute("onclick", "loginUsuario()");
+          texto.textContent = "¿No tienes cuenta? Regístrate";
+        }
+      }
+
+      async function registrarUsuario() {
+        const nombre = document.getElementById("nombreUsuario").value.trim();
+        const email = document.getElementById("emailUsuario").value.trim();
+        const password = document
+          .getElementById("passwordUsuario")
+          .value.trim();
+
+        if (!nombre || !email || !password) {
+          alert("Rellena todos los campos.");
+          return;
+        }
+
+        const res = await fetch("/registro", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            nombre,
+            email,
+            password,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          alert(mensajeRespuesta(data));
+          return;
+        }
+
+        localStorage.setItem("usuario", JSON.stringify(data.usuario));
+        alert(data.mensaje);
+        cerrarModalLogin();
+        comprobarSesion();
+      }
+
+      async function loginUsuario() {
+        const email = document.getElementById("emailUsuario").value.trim();
+        const password = document
+          .getElementById("passwordUsuario")
+          .value.trim();
+
+        if (!email || !password) {
+          alert("Introduce email y contraseña.");
+          return;
+        }
+
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          alert(mensajeRespuesta(data));
+          return;
+        }
+
+        localStorage.setItem("usuario", JSON.stringify(data.usuario));
+        alert(data.mensaje);
+        cerrarModalLogin();
+        comprobarSesion();
+      }
+
+      async function abrirCarrito() {
+        const usuario = obtenerUsuarioActual();
 
         if (!usuario) {
           abrirModalLogin();
           return;
         }
 
-        alert("Carrito (próximamente)");
+        const res = await fetch(`/carrito?usuario_id=${usuario.id}`);
+        const data = await res.json();
+
+        const contenedor = document.getElementById("contenidoCarrito");
+        contenedor.innerHTML = "";
+
+        if (!data.ok) {
+          contenedor.innerHTML = `<p class="mensaje">${mensajeRespuesta(data)}</p>`;
+          document.getElementById("modalCarrito").classList.remove("oculto");
+          return;
+        }
+
+        const peliculas = data.peliculas;
+
+        if (!Array.isArray(peliculas) || peliculas.length === 0) {
+          contenedor.innerHTML =
+            "<p class='mensaje'>Tu carrito está vacío.</p>";
+        } else {
+          peliculas.forEach((p) => {
+            const item = document.createElement("div");
+            item.className = "item-carrito";
+
+            item.innerHTML = `
+                <img src="${p.portada || "/imagenes/LOGO1.png"}" alt="${p.titulo}">
+
+                <div class="item-carrito-info">
+                    <h3>${p.titulo}</h3>
+                    <p>${p.generos || "Sin género"}</p>
+                    <span>⭐ ${p.puntuacion || 0} · ${p.fecha || "Sin fecha"}</span>
+
+                    <button onclick="eliminarDelCarrito(${p.id})">
+                        Eliminar
+                    </button>
+                </div>
+            `;
+
+            contenedor.appendChild(item);
+          });
+        }
+
+        document.getElementById("modalCarrito").classList.remove("oculto");
+      }
+
+      function cerrarCarrito() {
+        document.getElementById("modalCarrito").classList.add("oculto");
+      }
+
+      async function eliminarDelCarrito(id) {
+        const res = await fetch(`/carrito/eliminar/${id}`, {
+          method: "DELETE",
+        });
+
+        const data = await res.json();
+
+        alert(mensajeRespuesta(data));
+
+        abrirCarrito();
       }
 
       async function cargarPopulares() {
+        document.getElementById("tituloSeccion").textContent =
+          "Películas populares";
+
         const res = await fetch("/peliculas-populares");
         const peliculas = await res.json();
+
         pintarPeliculas(peliculas);
       }
 
@@ -102,10 +343,14 @@
           return;
         }
 
+        document.getElementById("tituloSeccion").textContent =
+          `Resultados para: ${peli}`;
+
         const res = await fetch(
           `/buscar-basico?peli=${encodeURIComponent(peli)}`,
         );
         const peliculas = await res.json();
+
         pintarPeliculas(peliculas);
       }
 
@@ -113,7 +358,7 @@
         const contenedor = document.getElementById("contenedorPeliculas");
         contenedor.innerHTML = "";
 
-        if (peliculas.length === 0) {
+        if (!Array.isArray(peliculas) || peliculas.length === 0) {
           contenedor.innerHTML =
             "<p class='mensaje'>No se encontraron películas.</p>";
           return;
@@ -123,23 +368,73 @@
           const card = document.createElement("article");
           card.className = "card";
 
+          const peliculaJSON = encodeURIComponent(JSON.stringify(p));
+
           card.innerHTML = `
-            <img class="poster" src="${p.portada || "/imagenes/LOGO1.png"}">
+            <img class="poster" src="${p.portada || "/imagenes/LOGO1.png"}" alt="${p.titulo}">
 
             <div class="card-info">
                 <h3>${p.titulo}</h3>
-                <p class="categoria">${p.generos.join(" • ")}</p>
-                <p class="descripcion">${p.descripcion}</p>
+
+                <p class="categoria">
+                    ${p.generos.length ? p.generos.join(" • ") : "Sin categoría"}
+                </p>
+
+                <p class="descripcion">
+                    ${p.descripcion}
+                </p>
+
+                <p class="datos">
+                    ⭐ ${p.puntuacion} · ${p.fecha}
+                </p>
 
                 <div class="botones-card">
                     <button class="btn-primary">Ver más</button>
-                    <button class="btn-secondary">Guardar</button>
+                    <button class="btn-secondary" onclick="guardarPelicula('${peliculaJSON}')">
+                        Guardar
+                    </button>
                 </div>
             </div>
         `;
 
           contenedor.appendChild(card);
         });
+      }
+
+      async function guardarPelicula(peliculaCodificada) {
+        const usuario = obtenerUsuarioActual();
+
+        if (!usuario) {
+          abrirModalLogin();
+          return;
+        }
+
+        const pelicula = JSON.parse(decodeURIComponent(peliculaCodificada));
+
+        const datos = {
+          usuario_id: usuario.id,
+          titulo: pelicula.titulo,
+          descripcion: pelicula.descripcion || "Sin descripción disponible.",
+          portada: pelicula.portada || null,
+          generos:
+            pelicula.generos && pelicula.generos.length
+              ? pelicula.generos.join(" • ")
+              : "Sin categoría",
+          fecha: pelicula.fecha || "Sin fecha",
+          puntuacion: pelicula.puntuacion || 0,
+        };
+
+        const res = await fetch("/carrito/agregar", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(datos),
+        });
+
+        const data = await res.json();
+
+        alert(mensajeRespuesta(data));
       }
     </script>
   </body>

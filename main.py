@@ -14,7 +14,7 @@ IMG_URL = "https://image.tmdb.org/t/p/w500"
 
 # SUPABASE
 SUPABASE_URL = "https://tdjrikkcwjbbxfflputq.supabase.co"
-SUPABASE_KEY = "sb_publishable_iIhqbP5dbFtInuPrqqJNRQ_19ojgHPY"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkanJpa2tjd2piYnhmZmxwdXRxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDE5ODUsImV4cCI6MjA5MzQ3Nzk4NX0.Sq3edrEG309qAlvN6SSyAbFZPN4zvIJ3lPCNDYglyMI"
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -38,6 +38,16 @@ class LoginUsuario(BaseModel):
     password: str
 
 
+class PeliculaCarrito(BaseModel):
+    usuario_id: int
+    titulo: str
+    descripcion: str = "Sin descripción disponible."
+    portada: str | None = None
+    generos: str = "Sin categoría"
+    fecha: str = "Sin fecha"
+    puntuacion: float = 0
+
+
 @app.get("/")
 def home():
     return FileResponse("FRONT/main.html")
@@ -54,12 +64,22 @@ def registro(usuario: RegistroUsuario):
         headers=SUPABASE_HEADERS,
         params={
             "email": f"eq.{usuario.email}",
-            "select": "email"
+            "select": "id,nombre,email"
         }
     )
 
-    if comprobar.status_code == 200 and len(comprobar.json()) > 0:
-        return {"ok": False, "mensaje": "Ese email ya está registrado"}
+    if comprobar.status_code != 200:
+        return {
+            "ok": False,
+            "mensaje": "Error comprobando usuario",
+            "error": comprobar.text
+        }
+
+    if len(comprobar.json()) > 0:
+        return {
+            "ok": False,
+            "mensaje": "Ese email ya está registrado"
+        }
 
     respuesta = requests.post(
         f"{SUPABASE_URL}/rest/v1/usuarios",
@@ -71,20 +91,34 @@ def registro(usuario: RegistroUsuario):
         }
     )
 
-    if respuesta.status_code in [200, 201]:
+    if respuesta.status_code not in [200, 201]:
         return {
-            "ok": True,
-            "mensaje": "Usuario registrado correctamente",
-            "usuario": {
-                "nombre": usuario.nombre,
-                "email": usuario.email
-            }
+            "ok": False,
+            "mensaje": "Error al registrar usuario",
+            "error": respuesta.text
+        }
+
+    buscar_usuario = requests.get(
+        f"{SUPABASE_URL}/rest/v1/usuarios",
+        headers=SUPABASE_HEADERS,
+        params={
+            "email": f"eq.{usuario.email}",
+            "select": "id,nombre,email"
+        }
+    )
+
+    datos_usuario = buscar_usuario.json()
+
+    if len(datos_usuario) == 0:
+        return {
+            "ok": False,
+            "mensaje": "Usuario creado, pero no se pudo recuperar su ID"
         }
 
     return {
-        "ok": False,
-        "mensaje": "Error al registrar usuario",
-        "error": respuesta.text
+        "ok": True,
+        "mensaje": "Usuario registrado correctamente",
+        "usuario": datos_usuario[0]
     }
 
 
@@ -96,7 +130,7 @@ def login(usuario: LoginUsuario):
         params={
             "email": f"eq.{usuario.email}",
             "password": f"eq.{hash_password(usuario.password)}",
-            "select": "nombre,email"
+            "select": "id,nombre,email"
         }
     )
 
@@ -110,12 +144,95 @@ def login(usuario: LoginUsuario):
     datos = respuesta.json()
 
     if len(datos) == 0:
-        return {"ok": False, "mensaje": "Email o contraseña incorrectos"}
+        return {
+            "ok": False,
+            "mensaje": "Email o contraseña incorrectos"
+        }
 
     return {
         "ok": True,
         "mensaje": "Login correcto",
         "usuario": datos[0]
+    }
+
+
+@app.post("/carrito/agregar")
+def agregar_carrito(pelicula: PeliculaCarrito):
+    datos = {
+        "usuario_id": pelicula.usuario_id,
+        "titulo": pelicula.titulo,
+        "descripcion": pelicula.descripcion,
+        "portada": pelicula.portada,
+        "generos": pelicula.generos,
+        "fecha": pelicula.fecha,
+        "puntuacion": pelicula.puntuacion
+    }
+
+    respuesta = requests.post(
+        f"{SUPABASE_URL}/rest/v1/carrito",
+        headers=SUPABASE_HEADERS,
+        json=datos
+    )
+
+    if respuesta.status_code in [200, 201]:
+        return {
+            "ok": True,
+            "mensaje": "Película guardada en el carrito"
+        }
+
+    return {
+        "ok": False,
+        "mensaje": "Error al guardar película",
+        "error": respuesta.text
+    }
+
+
+@app.get("/carrito")
+def ver_carrito(usuario_id: int = Query(...)):
+    respuesta = requests.get(
+        f"{SUPABASE_URL}/rest/v1/carrito",
+        headers=SUPABASE_HEADERS,
+        params={
+            "usuario_id": f"eq.{usuario_id}",
+            "select": "*",
+            "order": "id.desc"
+        }
+    )
+
+    if respuesta.status_code != 200:
+        return {
+            "ok": False,
+            "mensaje": "Error al cargar carrito",
+            "error": respuesta.text,
+            "peliculas": []
+        }
+
+    return {
+        "ok": True,
+        "peliculas": respuesta.json()
+    }
+
+
+@app.delete("/carrito/eliminar/{id_pelicula}")
+def eliminar_carrito(id_pelicula: int):
+    respuesta = requests.delete(
+        f"{SUPABASE_URL}/rest/v1/carrito",
+        headers=SUPABASE_HEADERS,
+        params={
+            "id": f"eq.{id_pelicula}"
+        }
+    )
+
+    if respuesta.status_code in [200, 204]:
+        return {
+            "ok": True,
+            "mensaje": "Película eliminada"
+        }
+
+    return {
+        "ok": False,
+        "mensaje": "Error al eliminar película",
+        "error": respuesta.text
     }
 
 
@@ -129,7 +246,10 @@ def obtener_generos():
     )
 
     generos = respuesta.json().get("genres", [])
-    return {g["id"]: g["name"] for g in generos}
+
+    return {
+        g["id"]: g["name"] for g in generos
+    }
 
 
 def formatear_peliculas(peliculas, mapa_generos):
