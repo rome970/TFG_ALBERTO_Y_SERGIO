@@ -4,8 +4,18 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import requests
 import hashlib
+import os                     # 👈 Añadido para las variables de entorno
+from google import genai      # 👈 Añadido el SDK oficial de Gemini
+from dotenv import load_dotenv # 👈 Añadido para cargar el archivo .env
+
+# Cargamos el archivo .env donde guardarás tu clave de Gemini
+load_dotenv()
 
 app = FastAPI()
+
+# Inicializamos el cliente oficial de Gemini.
+# Busca automáticamente la variable de entorno 'GEMINI_API_KEY'
+client = genai.Client()
 
 # TMDB
 TMDB_API_KEY = "9862fbf607942773733c0609aad2737f"
@@ -48,6 +58,11 @@ class PeliculaCarrito(BaseModel):
     puntuacion: float = 0
 
 
+# 👈 NUEVO: Modelo Pydantic para recibir la consulta de la IA
+class ConsultaIA(BaseModel):
+    query: str
+
+
 @app.get("/")
 def home():
     return FileResponse("FRONT/main.html")
@@ -55,6 +70,31 @@ def home():
 
 def hash_password(password: str):
     return hashlib.sha256(password.encode()).hexdigest()
+
+
+# --- NUEVA RUTA PARA LA BARRA DE BÚSQUEDA CON IA ---
+@app.post("/buscar-ia")
+def buscar_con_ia(consulta: ConsultaIA):
+    if not consulta.query.strip():
+        return {"ok": False, "mensaje": "La consulta no puede estar vacía"}
+
+    try:
+        # Usamos el modelo rápido y económico gemini-2.5-flash
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"Actúa como un recomendador experto en cine y asistente para mi web de películas. Responde de forma amigable y concisa: {consulta.query}"
+        )
+        
+        return {
+            "ok": True,
+            "resultado": response.text
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "mensaje": "Error al conectar con el servicio de IA",
+            "error": str(e)
+        }
 
 
 @app.post("/registro")

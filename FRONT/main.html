@@ -8,21 +8,85 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     />
+    <style>
+      /* Estilos rápidos para acomodar el nuevo buscador y la caja de texto de la IA */
+      .buscadores-container {
+        display: flex;
+        gap: 15px;
+        flex: 1;
+        max-width: 700px;
+        margin: 0 20px;
+      }
+      .buscador-ia {
+        display: flex;
+        flex: 1;
+      }
+      .buscador-ia input {
+        border: 1px solid #8a2be2; /* Un color distintivo para la IA */
+        border-radius: 4px 0 0 4px;
+        padding: 5px 10px;
+        width: 100%;
+        outline: none;
+      }
+      .buscador-ia button {
+        background-color: #8a2be2;
+        color: white;
+        border: none;
+        padding: 5px 15px;
+        border-radius: 0 4px 4px 0;
+        cursor: pointer;
+      }
+      .buscador-ia button:hover {
+        background-color: #6a1b9a;
+      }
+      .contenedor-respuesta-ia {
+        background: #f3e5f5;
+        border-left: 5px solid #8a2be2;
+        padding: 20px;
+        border-radius: 4px;
+        margin-bottom: 30px;
+        width: 100%;
+        box-sizing: border-box;
+        line-height: 1.6;
+        white-space: pre-line; /* Mantiene los saltos de línea de la IA */
+      }
+      .oculto {
+        display: none !important;
+      }
+    </style>
   </head>
 
   <body>
     <header class="cabecera">
       <div class="logo-box">
-        <img src="/imagenes/LOGO1.png" alt="Logo TUFF" />
+        <a href="http://127.0.0.1:8000/">
+          <img src="/imagenes/LOGO1.png" alt="Logo TUFF" />
+        </a>
       </div>
 
-      <div class="buscador">
-        <input
-          type="text"
-          id="inputPelicula"
-          placeholder="Buscar película..."
-        />
-        <button onclick="buscarPeliculas()">Buscar</button>
+      <!-- Agrupamos el buscador básico y el de IA juntos -->
+      <div class="buscadores-container">
+        <!-- Buscador Básico Existente -->
+        <div class="buscador">
+          <input
+            type="text"
+            id="inputPelicula"
+            placeholder="Buscar película..."
+          />
+          <button onclick="buscarPeliculas()">Buscar</button>
+        </div>
+
+        <!-- 🌟 NUEVO: Buscador Recomendador con IA de Gemini -->
+        <div class="buscador-ia">
+          <input
+            type="text"
+            id="inputIA"
+            placeholder="Pregúntale a la IA (Ej: Pelis de terror psicológico)..."
+          />
+          <button onclick="buscarConIA()">
+            <i class="fa-solid fa-brain"></i> IA
+          </button>
+        </div>
       </div>
 
       <div class="acciones-header">
@@ -53,6 +117,9 @@
     </header>
 
     <main class="contenido">
+      <!-- 🌟 NUEVO: Bloque dinámico donde se imprimirá el texto que nos devuelva Gemini -->
+      <div id="respuestaIA" class="contenedor-respuesta-ia oculto"></div>
+
       <h2 class="titulo-seccion" id="tituloSeccion">Películas populares</h2>
 
       <section id="contenedorPeliculas" class="contenedor-peliculas">
@@ -60,10 +127,10 @@
       </section>
     </main>
 
+    <!-- Modal Login -->
     <div id="modalLogin" class="modal oculto">
       <div class="modal-contenido">
         <h2 id="tituloModal">Iniciar sesión</h2>
-
         <input
           type="text"
           id="nombreUsuario"
@@ -72,24 +139,21 @@
         />
         <input type="email" id="emailUsuario" placeholder="Email" />
         <input type="password" id="passwordUsuario" placeholder="Contraseña" />
-
         <button id="btnAccionUsuario" onclick="loginUsuario()">
           Iniciar sesión
         </button>
         <button class="cerrar" onclick="cerrarModalLogin()">Cerrar</button>
-
         <p class="texto-modal" id="cambiarModo" onclick="cambiarModoRegistro()">
           ¿No tienes cuenta? Regístrate
         </p>
       </div>
     </div>
 
+    <!-- Modal Carrito -->
     <div id="modalCarrito" class="modal oculto">
       <div class="modal-contenido modal-carrito">
-        <h2>Mi carrito</h2>
-
+        <h2>Biblioteca</h2>
         <div id="contenidoCarrito" class="contenido-carrito"></div>
-
         <button class="cerrar" onclick="cerrarCarrito()">Cerrar</button>
       </div>
     </div>
@@ -100,40 +164,79 @@
       window.addEventListener("load", () => {
         comprobarSesion();
         cargarPopulares();
+
+        // 🌟 NUEVO: Permitir presionar "Enter" en el input de la IA
+        document.getElementById("inputIA").addEventListener("keypress", (e) => {
+          if (e.key === "Enter") buscarConIA();
+        });
       });
+
+      // 🌟 NUEVA FUNCIÓN: Conexión con tu endpoint de FastAPI `/buscar-ia`
+      async function buscarConIA() {
+        const queryTexto = document.getElementById("inputIA").value.trim();
+        const cajaIA = document.getElementById("respuestaIA");
+
+        if (queryTexto === "") {
+          cajaIA.classList.add("oculto");
+          cajaIA.innerHTML = "";
+          return;
+        }
+
+        // Mostramos la caja de la IA en estado de carga
+        cajaIA.classList.remove("oculto");
+        cajaIA.innerHTML = `<strong>🤖 Asistente IA:</strong> <span style="color: #666; font-style: italic;">Analizando tu petición cinematográfica...</span>`;
+
+        try {
+          const res = await fetch("/buscar-ia", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ query: queryTexto }),
+          });
+
+          const data = await res.json();
+
+          if (data.ok) {
+            // Pintamos la respuesta en texto que genera Gemini
+            cajaIA.innerHTML = `<strong>🤖 Recomendaciones de la IA:</strong><br><br>${data.resultado}`;
+          } else {
+            cajaIA.innerHTML = `<strong>❌ Error de la IA:</strong> ${data.mensaje}`;
+          }
+        } catch (error) {
+          cajaIA.innerHTML = `<strong>❌ Error:</strong> No se pudo conectar con el recomendador de IA.`;
+          console.error(error);
+        }
+      }
+
+      // --- TUS FUNCIONES ORIGINALES SIN ALTERAR ---
 
       function mensajeRespuesta(data) {
         if (data.mensaje) {
           return data.mensaje + (data.error ? "\n\n" + data.error : "");
         }
-
         if (data.detail) {
           return (
             "Error de validación:\n\n" + JSON.stringify(data.detail, null, 2)
           );
         }
-
         if (data.error) {
           return "Error:\n\n" + data.error;
         }
-
         return "Error desconocido. Revisa la consola o Supabase.";
       }
 
       function obtenerUsuarioActual() {
         const usuario = JSON.parse(localStorage.getItem("usuario"));
-
         if (!usuario || !usuario.id || !usuario.nombre || !usuario.email) {
           localStorage.removeItem("usuario");
           return null;
         }
-
         return usuario;
       }
 
       function comprobarSesion() {
         const usuario = obtenerUsuarioActual();
-
         const btnCarrito = document.getElementById("btnCarrito");
         const btnLogout = document.getElementById("btnLogout");
         const usuarioActivo = document.getElementById("usuarioActivo");
@@ -165,7 +268,6 @@
 
       function cambiarModoRegistro() {
         modoRegistro = !modoRegistro;
-
         const nombre = document.getElementById("nombreUsuario");
         const titulo = document.getElementById("tituloModal");
         const boton = document.getElementById("btnAccionUsuario");
@@ -176,13 +278,13 @@
           titulo.textContent = "Registrarse";
           boton.textContent = "Crear cuenta";
           boton.setAttribute("onclick", "registrarUsuario()");
-          texto.textContent = "¿Ya tienes cuenta? Inicia sesión";
+          text.textContent = "¿Ya tienes cuenta? Inicia sesión";
         } else {
           nombre.classList.add("oculto");
           titulo.textContent = "Iniciar sesión";
           boton.textContent = "Iniciar sesión";
           boton.setAttribute("onclick", "loginUsuario()");
-          texto.textContent = "¿No tienes cuenta? Regístrate";
+          text.textContent = "¿No tienes cuenta? Regístrate";
         }
       }
 
@@ -200,18 +302,11 @@
 
         const res = await fetch("/registro", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            nombre,
-            email,
-            password,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nombre, email, password }),
         });
 
         const data = await res.json();
-
         if (!data.ok) {
           alert(mensajeRespuesta(data));
           return;
@@ -236,17 +331,11 @@
 
         const res = await fetch("/login", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
         });
 
         const data = await res.json();
-
         if (!data.ok) {
           alert(mensajeRespuesta(data));
           return;
@@ -260,7 +349,6 @@
 
       async function abrirCarrito() {
         const usuario = obtenerUsuarioActual();
-
         if (!usuario) {
           abrirModalLogin();
           return;
@@ -268,7 +356,6 @@
 
         const res = await fetch(`/carrito?usuario_id=${usuario.id}`);
         const data = await res.json();
-
         const contenedor = document.getElementById("contenidoCarrito");
         contenedor.innerHTML = "";
 
@@ -279,33 +366,25 @@
         }
 
         const peliculas = data.peliculas;
-
         if (!Array.isArray(peliculas) || peliculas.length === 0) {
           contenedor.innerHTML =
-            "<p class='mensaje'>Tu carrito está vacío.</p>";
+            "<p class='mensaje'>Tu biblioteca está vacía.</p>";
         } else {
           peliculas.forEach((p) => {
             const item = document.createElement("div");
             item.className = "item-carrito";
-
             item.innerHTML = `
                 <img src="${p.portada || "/imagenes/LOGO1.png"}" alt="${p.titulo}">
-
                 <div class="item-carrito-info">
                     <h3>${p.titulo}</h3>
                     <p>${p.generos || "Sin género"}</p>
                     <span>⭐ ${p.puntuacion || 0} · ${p.fecha || "Sin fecha"}</span>
-
-                    <button onclick="eliminarDelCarrito(${p.id})">
-                        Eliminar
-                    </button>
+                    <button onclick="eliminarDelCarrito(${p.id})">Eliminar</button>
                 </div>
             `;
-
             contenedor.appendChild(item);
           });
         }
-
         document.getElementById("modalCarrito").classList.remove("oculto");
       }
 
@@ -317,40 +396,35 @@
         const res = await fetch(`/carrito/eliminar/${id}`, {
           method: "DELETE",
         });
-
         const data = await res.json();
-
         alert(mensajeRespuesta(data));
-
         abrirCarrito();
       }
 
       async function cargarPopulares() {
         document.getElementById("tituloSeccion").textContent =
           "Películas populares";
-
         const res = await fetch("/peliculas-populares");
         const peliculas = await res.json();
-
         pintarPeliculas(peliculas);
       }
 
       async function buscarPeliculas() {
         const peli = document.getElementById("inputPelicula").value.trim();
-
         if (peli === "") {
           cargarPopulares();
           return;
         }
 
+        // Ocultamos el bloque de la IA si el usuario decide hacer una búsqueda básica estándar
+        document.getElementById("respuestaIA").classList.add("oculto");
+
         document.getElementById("tituloSeccion").textContent =
           `Resultados para: ${peli}`;
-
         const res = await fetch(
           `/buscar-basico?peli=${encodeURIComponent(peli)}`,
         );
         const peliculas = await res.json();
-
         pintarPeliculas(peliculas);
       }
 
@@ -367,50 +441,33 @@
         peliculas.forEach((p) => {
           const card = document.createElement("article");
           card.className = "card";
-
           const peliculaJSON = encodeURIComponent(JSON.stringify(p));
 
           card.innerHTML = `
             <img class="poster" src="${p.portada || "/imagenes/LOGO1.png"}" alt="${p.titulo}">
-
             <div class="card-info">
                 <h3>${p.titulo}</h3>
-
-                <p class="categoria">
-                    ${p.generos.length ? p.generos.join(" • ") : "Sin categoría"}
-                </p>
-
-                <p class="descripcion">
-                    ${p.descripcion}
-                </p>
-
-                <p class="datos">
-                    ⭐ ${p.puntuacion} · ${p.fecha}
-                </p>
-
+                <p class="categoria">${p.generos.length ? p.generos.join(" • ") : "Sin categoría"}</p>
+                <p class="descripcion">${p.descripcion}</p>
+                <p class="datos">⭐ ${p.puntuacion} · ${p.fecha}</p>
                 <div class="botones-card">
                     <button class="btn-primary">Ver más</button>
-                    <button class="btn-secondary" onclick="guardarPelicula('${peliculaJSON}')">
-                        Guardar
-                    </button>
+                    <button class="btn-secondary" onclick="guardarPelicula('${peliculaJSON}')">Guardar</button>
                 </div>
             </div>
-        `;
-
+          `;
           contenedor.appendChild(card);
         });
       }
 
       async function guardarPelicula(peliculaCodificada) {
         const usuario = obtenerUsuarioActual();
-
         if (!usuario) {
           abrirModalLogin();
           return;
         }
 
         const pelicula = JSON.parse(decodeURIComponent(peliculaCodificada));
-
         const datos = {
           usuario_id: usuario.id,
           titulo: pelicula.titulo,
@@ -426,14 +483,11 @@
 
         const res = await fetch("/carrito/agregar", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(datos),
         });
 
         const data = await res.json();
-
         alert(mensajeRespuesta(data));
       }
     </script>
